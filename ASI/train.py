@@ -31,7 +31,7 @@ num_class = args.num_class
 fold = 2
 thr = 0
 seed = 666  
-data_root_dir = f"../data/{dataset_name}"
+data_root_dir = f"../data/train_data/{dataset_name}"
 batch_size = 16
 vit_mode = "h"
 

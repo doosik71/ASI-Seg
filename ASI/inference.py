@@ -39,7 +39,7 @@ dataset_name = args.dataset
 fold = args.fold
 num_class = args.num_class
 thr = 0
-data_root_dir = f"../data/{dataset_name}"
+data_root_dir = f"../data/train_data/{dataset_name}"
 
 
 print("======> Load Dataset-Specific Parameters" )
@@ -264,6 +264,5 @@ with torch.no_grad():
         endovis_results = eval_endovis(endovis_masks, gt_endovis_masks, num_class)
         L.append(endovis_results)
         print_log(L,log_file="/data/zzm/sam_demo/surgical_sam.log")
-
 
 

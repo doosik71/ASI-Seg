@@ -11,8 +11,13 @@ from .build_sam import (
     build_sam_vit_b,
     sam_model_registry,
 )
-#from .bulid_sam_test import sam_model_registry_test
-from .predictor import SamPredictor
-from .automatic_mask_generator import SamAutomaticMaskGenerator
+
+try:
+    from .predictor import SamPredictor
+    from .automatic_mask_generator import SamAutomaticMaskGenerator
+except ModuleNotFoundError:
+    # Allow training-only workflows to import the registry without torchvision.
+    SamPredictor = None
+    SamAutomaticMaskGenerator = None
+
 from .modeling import ImageEncoderViT_test
-#from .modeling import SAM
