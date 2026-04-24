@@ -246,11 +246,29 @@ def collect_endovis18_raw(raw_root):
     return data
 
 
-def convert_endovis17_base(raw_root, output_root, predictor):
+def build_stage_labels(dataset, skip_augment):
+    stages = []
+
+    if dataset in ("endovis_2017", "all"):
+        stages.append("Preparing endovis_2017 base")
+        if not skip_augment:
+            stages.append("Augmenting endovis_2017 train")
+
+    if dataset in ("endovis_2018", "all"):
+        stages.append("Preparing endovis_2018 train")
+        stages.append("Preparing endovis_2018 val")
+        if not skip_augment:
+            stages.append("Augmenting endovis_2018 train")
+
+    total = len(stages)
+    return [f"[{index}/{total}] {stage}" for index, stage in enumerate(stages, start=1)]
+
+
+def convert_endovis17_base(raw_root, output_root, predictor, stage_label):
     items = collect_endovis17_raw(raw_root)
     dataset_root = osp.join(output_root, "endovis_2017", "0")
 
-    for item in tqdm(items, desc="Preparing endovis_2017 base", unit="frame"):
+    for item in tqdm(items, desc=stage_label, unit="frame"):
         seq_name = f"seq{item['seq_id']}"
         stem = osp.splitext(item["filename"])[0]
         mask = cv2.imread(item["label_path"], cv2.IMREAD_GRAYSCALE)
@@ -286,13 +304,14 @@ def convert_endovis17_base(raw_root, output_root, predictor):
                 np.save(embedding_path, embeddings[class_id])
 
 
-def convert_endovis18_base(raw_root, output_root, predictor):
+def convert_endovis18_base(raw_root, output_root, predictor, train_stage_label, val_stage_label):
     dataset = collect_endovis18_raw(raw_root)
     dataset_root = osp.join(output_root, "endovis_2018")
 
     for mode, items in dataset.items():
         base_dir = osp.join(dataset_root, mode, "0") if mode == "train" else osp.join(dataset_root, mode)
-        for item in tqdm(items, desc=f"Preparing endovis_2018 {mode}", unit="frame"):
+        stage_label = train_stage_label if mode == "train" else val_stage_label
+        for item in tqdm(items, desc=stage_label, unit="frame"):
             seq_name = f"seq{item['seq_id']}"
             stem = osp.splitext(item["filename"])[0]
             mask = cv2.imread(item["label_path"], cv2.IMREAD_GRAYSCALE)
@@ -355,7 +374,7 @@ def collect_version0_items(version0_images_dir, version0_masks_dir):
     return grouped
 
 
-def generate_augmented_versions(dataset_root, train_subdir, n_versions, predictor):
+def generate_augmented_versions(dataset_root, train_subdir, n_versions, predictor, stage_label):
     version0_root = osp.join(dataset_root, train_subdir, "0") if train_subdir else osp.join(dataset_root, "0")
     version0_images_dir = osp.join(version0_root, "images")
     version0_masks_dir = osp.join(version0_root, "binary_annotations")
@@ -367,7 +386,7 @@ def generate_augmented_versions(dataset_root, train_subdir, n_versions, predicto
 
     sorted_items = sorted(items.items())
 
-    for (seq_name, stem), item in tqdm(sorted_items, desc=f"Augmenting {osp.basename(dataset_root)} {train_subdir or 'train'}", unit="frame"):
+    for (seq_name, stem), item in tqdm(sorted_items, desc=stage_label, unit="frame"):
         if item["image"] is None or not item["masks"]:
             continue
 
@@ -474,18 +493,41 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     predictor = build_predictor(args.sam_checkpoint, device)
+    stage_labels = build_stage_labels(args.dataset, args.skip_augment)
+    stage_index = 0
 
     if args.dataset in ("endovis_2017", "all"):
         raw_root = osp.join(args.raw_data_root, "endovis2017")
-        convert_endovis17_base(raw_root, args.output_root, predictor)
+        convert_endovis17_base(raw_root, args.output_root, predictor, stage_labels[stage_index])
+        stage_index += 1
         if not args.skip_augment:
-            generate_augmented_versions(osp.join(args.output_root, "endovis_2017"), "", args.n_version, predictor)
+            generate_augmented_versions(
+                osp.join(args.output_root, "endovis_2017"),
+                "",
+                args.n_version,
+                predictor,
+                stage_labels[stage_index],
+            )
+            stage_index += 1
 
     if args.dataset in ("endovis_2018", "all"):
         raw_root = osp.join(args.raw_data_root, "endovis2018")
-        convert_endovis18_base(raw_root, args.output_root, predictor)
+        convert_endovis18_base(
+            raw_root,
+            args.output_root,
+            predictor,
+            stage_labels[stage_index],
+            stage_labels[stage_index + 1],
+        )
+        stage_index += 2
         if not args.skip_augment:
-            generate_augmented_versions(osp.join(args.output_root, "endovis_2018"), "train", args.n_version, predictor)
+            generate_augmented_versions(
+                osp.join(args.output_root, "endovis_2018"),
+                "train",
+                args.n_version,
+                predictor,
+                stage_labels[stage_index],
+            )
 
 
 if __name__ == "__main__":
