@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+OLD_OPTS="$(set +o)"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,3 +82,5 @@ main() {
 }
 
 main "$@"
+
+eval "$OLD_OPTS"

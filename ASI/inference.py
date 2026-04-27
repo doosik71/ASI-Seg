@@ -1,30 +1,26 @@
 import sys
-sys.path.append("..")
-sam_path = "/data/zzm/SurgicalSAM-main"
-sys.path.insert(0,sam_path)
-import os
-import os.path as osp 
-import random 
 import argparse
 import numpy as np 
 import torch 
 from torch.utils.data import DataLoader
 from dataset_audio import Endovis18Dataset, Endovis17Dataset
-import segment_anything
 from segment_anything import sam_model_registry
 from model import Learnable_Prototypes, Prototype_Prompt_Encoder
 from utils import print_log, create_binary_masks, create_endovis_masks, eval_endovis, read_gt_endovis_masks, compute_mask_IU_endovis
 from model_forward_test import model_forward_function
-from loss import DiceLoss
-from pytorch_metric_learning import losses
-from tqdm import tqdm
 from CLIP import clip
-import whisper
-import torch.nn as nn
-import torch.nn.functional as F
-import re
-from PIL import Image
 import json
+from pathlib import Path
+
+ASI_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ASI_ROOT.parent
+DATA_ROOT = PROJECT_ROOT / "data"
+CKP_ROOT = PROJECT_ROOT / "ckp"
+WORK_DIRS_ROOT = ASI_ROOT / "work_dirs"
+
+sys.path.append(str(PROJECT_ROOT))
+sam_path = DATA_ROOT / "zzm" / "SurgicalSAM-main"
+sys.path.insert(0, str(sam_path))
 
 print("======> Process Arguments")
 parser = argparse.ArgumentParser()
@@ -39,7 +35,7 @@ dataset_name = args.dataset
 fold = args.fold
 num_class = args.num_class
 thr = 0
-data_root_dir = f"../data/train_data/{dataset_name}"
+data_root_dir = str(DATA_ROOT / "train_data" / dataset_name)
 
 
 print("======> Load Dataset-Specific Parameters" )
@@ -48,7 +44,7 @@ if "18" in dataset_name:
     dataset = Endovis18Dataset(data_root_dir = data_root_dir, 
                                 mode = "val",
                                 vit_mode = "h")
-    surgicalSAM_ckp = f"./work_dirs/{dataset_name}/model_ckp.pth"
+    surgicalSAM_ckp = str(WORK_DIRS_ROOT / dataset_name / "model_ckp.pth")
     
     gt_endovis_masks = read_gt_endovis_masks(data_root_dir = data_root_dir,
                                             mode = "val")
@@ -61,7 +57,7 @@ elif "17" in dataset_name:
                                 vit_mode = "h",
                                 version = 0)
 
-    surgicalSAM_ckp = f"./work_dirs/{dataset_name}/{fold}/model_ckp.pth"
+    surgicalSAM_ckp = str(WORK_DIRS_ROOT / dataset_name / str(fold) / "model_ckp.pth")
     
     gt_endovis_masks = read_gt_endovis_masks(data_root_dir = data_root_dir,
                                             mode = "val",
@@ -71,7 +67,7 @@ dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
 
 
 print("======> Load SAM" )
-sam_checkpoint = "../ckp/sam/sam_vit_h_4b8939.pth"
+sam_checkpoint = str(CKP_ROOT / "sam" / "sam_vit_h_4b8939.pth")
 model_type = "vit_h_no_image_encoder"
 #model_type = "vit_h"
 sam_prompt_encoder, sam_decoder = sam_model_registry[model_type](checkpoint=sam_checkpoint)
@@ -263,6 +259,7 @@ with torch.no_grad():
         endovis_masks = create_endovis_masks(binary_masks, 1024, 1280)
         endovis_results = eval_endovis(endovis_masks, gt_endovis_masks, num_class)
         L.append(endovis_results)
-        print_log(L,log_file="/data/zzm/sam_demo/surgical_sam.log")
-
+        log_path = DATA_ROOT / "sam_demo" / "surgical_sam.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        print_log(L, log_file=str(log_path))
 

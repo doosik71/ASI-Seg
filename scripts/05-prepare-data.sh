@@ -12,7 +12,7 @@ SAM_CHECKPOINT="${PROJECT_ROOT}/data/sam_model/sam_vit_h_4b8939.pth"
 
 print_next_step() {
   echo "train data is ready."
-  echo "Next step: ./scripts/05-setup-clip.sh"
+  echo "Next step: ./scripts/06-train-model.sh"
 }
 
 has_existing_train_data() {

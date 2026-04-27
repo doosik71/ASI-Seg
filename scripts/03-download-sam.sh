@@ -69,4 +69,4 @@ fi
 verify_checksum
 echo "Downloaded to ${TARGET_FILE}"
 echo "SAM model is ready."
-echo "Next step: ./scripts/04-prepare-data.sh"
+echo "Next step: ./scripts/04-setup-clip.sh"

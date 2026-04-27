@@ -2,8 +2,6 @@ import torch
 from einops import rearrange
 from torch.nn import functional as F
 
-import sys
-
 # forward process of the model
 def model_forward_function(prototype_prompt_encoder, 
                             sam_prompt_encoder, 
@@ -13,7 +11,7 @@ def model_forward_function(prototype_prompt_encoder,
                             cls_ids): 
 
     sam_feats = rearrange(sam_feats, 'b h w c -> b (h w) c')
-    print("sam_feats: ",sam_feats.shape)
+    # print("sam_feats: ",sam_feats.shape)
     
     dense_embeddings, sparse_embeddings = prototype_prompt_encoder(sam_feats, prototypes, cls_ids)
 

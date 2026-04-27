@@ -4,13 +4,27 @@ import os.path as osp
 import re 
 import numpy as np 
 import cv2 
-import torch
 from torch.utils.data.dataloader import default_collate
 import torch.nn.utils.rnn as rnn_utils
-import torchaudio.transforms as T
-import torch.nn.functional as F
-# import whisper
-from tqdm import tqdm
+
+
+def _filter_complete_samples(mask_list, mask_root, vit_mode):
+    complete_mask_list = []
+    skipped = 0
+
+    sam_root = mask_root.replace("binary_annotations", f"sam_features_{vit_mode}")
+    emb_root = mask_root.replace("binary_annotations", f"class_embeddings_{vit_mode}")
+
+    for mask_name in mask_list:
+        feat_path = osp.join(sam_root, mask_name.split("_class")[0] + ".npy")
+        emb_path = osp.join(emb_root, mask_name.replace("png", "npy"))
+
+        if osp.isfile(feat_path) and osp.isfile(emb_path):
+            complete_mask_list.append(mask_name)
+        else:
+            skipped += 1
+
+    return complete_mask_list, skipped
 
 def custom_collate_fn(batch):
 
@@ -61,6 +75,10 @@ class Endovis18Dataset(Dataset):
             if len(files) == 0:
                 continue 
             self.mask_list += [osp.join(osp.basename(subdir),i) for i in files if i.endswith('.png')]
+
+        self.mask_list, skipped = _filter_complete_samples(self.mask_list, self.mask_dir, self.vit_mode)
+        if skipped:
+            print(f"Skipped {skipped} incomplete Endovis18 {mode} samples from {self.mask_dir}")
             
         # put all binary images into a list
         self.image_list = []
@@ -173,6 +191,10 @@ class Endovis17Dataset(Dataset):
             #         self.mask_list += [mask]
             seq_path = osp.join(self.mask_dir, f"seq{seq}")
             self.mask_list += [f"seq{seq}/{mask}" for mask in os.listdir(seq_path)]
+
+        self.mask_list, skipped = _filter_complete_samples(self.mask_list, self.mask_dir, self.vit_mode)
+        if skipped:
+            print(f"Skipped {skipped} incomplete Endovis17 {mode} samples from {self.mask_dir}")
             
     def __len__(self):
         return len(self.mask_list)

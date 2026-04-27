@@ -5,6 +5,11 @@ import os
 import os.path as osp 
 import re 
 from PIL import Image
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_ROOT = PROJECT_ROOT / "data"
 
 
 def create_binary_masks(binary_masks, preds, preds_quality, mask_names, thr):
@@ -23,8 +28,7 @@ def create_binary_masks(binary_masks, preds, preds_quality, mask_names, thr):
     for pred_mask, mask_name, pred_quality in zip(pred_masks, mask_names, preds_quality):        
 
         seq_name = mask_name.split("/")[0]
-        #frame_name = re.sub(r'_class\d+', '', mask_name)
-        frame_name = osp.basename(mask_name).split("_")[0]
+        frame_name = re.sub(r'_class\d+\.png$', '', osp.basename(mask_name))
         
         if seq_name not in binary_masks.keys():
             binary_masks[seq_name] = dict()
@@ -80,10 +84,9 @@ def create_endovis_masks(binary_masks, H, W):
             label_multiplier = 10  # 或者选择一个能让你的类别在可视化时更容易区分的值
             visual_mask = (endovis_mask * label_multiplier).astype(np.uint8)
             img = Image.fromarray(visual_mask)
-            save_dir = '/data/zzm/SurgicalSAM-main/surgicalSAM/endovis2017/surgical_sam'
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-            img.save(f"{save_dir}/{seq}_{frame}.png")
+            save_dir = DATA_ROOT / "endovis2017" / "surgical_sam"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            img.save(save_dir / f"{seq}_{frame}.png")
     
     return endovis_masks
 
@@ -115,6 +118,13 @@ def eval_endovis(endovis_masks, gt_endovis_masks,num_classes):
         #print("file_name: ",file_name)
        
         full_mask = gt_endovis_masks[file_name]
+        target_shape = tuple(full_mask.shape[-2:])
+        if prediction.shape[-2:] != target_shape:
+            prediction = cv2.resize(
+                prediction.astype(np.uint8),
+                (target_shape[1], target_shape[0]),
+                interpolation=cv2.INTER_NEAREST,
+            )
 
         
         im_iou = []
@@ -189,7 +199,7 @@ def compute_mask_IU_endovis(masks, target):
     return intersection, union
 
 
-def read_gt_endovis_masks(data_root_dir = "../data/endovis_2017",
+def read_gt_endovis_masks(data_root_dir = str(DATA_ROOT / "endovis_2017"),
                           mode = "val", 
                           fold = None):
     

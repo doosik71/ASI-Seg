@@ -9,7 +9,7 @@ CLIP_REPO_URL="https://github.com/openai/CLIP.git"
 
 print_next_step() {
   echo "CLIP repository is ready."
-  echo "Next step: ./scripts/06-train-model.sh"
+  echo "Next step: ./scripts/05-prepare-data.sh"
 }
 
 main() {

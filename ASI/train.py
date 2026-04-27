@@ -1,5 +1,7 @@
 import sys
+
 sys.path.append("..")
+
 import os
 import os.path as osp 
 import random 
@@ -16,7 +18,6 @@ from loss import DiceLoss
 from pytorch_metric_learning import losses
 from tqdm import tqdm
 from CLIP import clip
-import torch.nn as nn
 import torch.nn.functional as F
 
 print("======> Process Arguments")
@@ -207,7 +208,14 @@ for epoch in range(num_epochs):
         cls_ids = cls_ids.to(device)
         indices_tensor = torch.tensor([i for i in range(1, prototypes.size()[0] + 1)], device=device)
         contrastive_loss = contrastive_loss_model(prototypes, indices_tensor, ref_emb=class_embeddings, ref_labels=cls_ids)
-        seg_loss = seg_loss_model(preds, masks/255)
+        if masks.shape[-2:] != preds.shape[-2:]:
+            masks = F.interpolate(
+                masks.unsqueeze(1).float(),
+                size=preds.shape[-2:],
+                mode="nearest",
+            ).squeeze(1)
+
+        seg_loss = seg_loss_model(preds, masks / 255.0)
     
         loss = seg_loss + contrastive_loss
         loss = loss / accumulation_steps  # Normalize our loss (if averaged)
