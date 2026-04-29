@@ -1,0 +1,1 @@
+Validation - Epoch: 1999/1999; IoU_Results: {'challengIoU': np.float64(65.476), 'IoU': np.float64(65.476), 'mcIoU': 57.398, 'mIoU': np.float64(64.754), 'cIoU_per_class': [62.252, 48.266, 75.143, nan, 27.733, 73.598, nan], 'file': 'seq4/seq_4_frame077.png'} 

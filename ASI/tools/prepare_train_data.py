@@ -148,6 +148,7 @@ def is_frame_prepared(base_dir, seq_name, stem, class_ids, with_transcription=Fa
 def is_augmented_frame_prepared(save_root, seq_name, stem, class_ids, with_transcription=False):
     required_paths = [
         osp.join(save_root, "images", seq_name, f"{stem}.png"),
+        osp.join(save_root, "annotations", seq_name, f"{stem}.png"),
         osp.join(save_root, "sam_features_h", seq_name, f"{stem}.npy"),
     ]
 
@@ -452,8 +453,13 @@ def generate_augmented_versions(dataset_root, train_subdir, n_versions, predicto
             feat, embeddings = compute_feature_and_embeddings(frame, binary_masks, predictor)
 
             image_path = osp.join(save_root, "images", seq_name, f"{stem}.png")
+            annotation_path = osp.join(save_root, "annotations", seq_name, f"{stem}.png")
             feat_path = osp.join(save_root, "sam_features_h", seq_name, f"{stem}.npy")
             save_image(image_path, frame)
+            multiclass_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            for class_id in sorted(binary_masks):
+                multiclass_mask[binary_masks[class_id] > 0] = class_id
+            save_mask(annotation_path, multiclass_mask)
             ensure_dir(osp.dirname(feat_path))
             np.save(feat_path, feat)
 
