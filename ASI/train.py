@@ -26,13 +26,14 @@ import torch.nn.functional as F
 print("======> Process Arguments")
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="endovis_2017", choices=["endovis_2018", "endovis_2017"], help='specify dataset')
+parser.add_argument('--fold', type=int, default=0, choices=[0, 1, 2, 3], help='specify fold number for endovis_2017 dataset')
 parser.add_argument('--num_class', type=int, default=7, help='specify the number of label classes')
 args = parser.parse_args()
 
 print("======> Set Parameters for Training" )
 dataset_name = args.dataset
 num_class = args.num_class
-fold = 2
+fold = args.fold
 thr = 0
 seed = 666  
 data_root_dir = f"../data/train_data/{dataset_name}"
