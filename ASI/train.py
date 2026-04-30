@@ -1,6 +1,9 @@
 import sys
+from pathlib import Path
 
-sys.path.append("..")
+ASI_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ASI_ROOT.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import os
 import os.path as osp 

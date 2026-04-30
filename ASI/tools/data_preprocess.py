@@ -1,5 +1,9 @@
 import sys
-sys.path.append("../..")
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 import os
 import os.path as osp
 import cv2

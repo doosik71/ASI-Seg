@@ -1,5 +1,12 @@
-import sys
 import argparse
+import sys
+from pathlib import Path
+
+ASI_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = ASI_ROOT.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+import cv2
 import numpy as np 
 import torch 
 from torch.utils.data import DataLoader
@@ -10,23 +17,35 @@ from utils import print_log, create_binary_masks, create_endovis_masks, eval_end
 from model_forward_test import model_forward_function
 from CLIP import clip
 import json
-from pathlib import Path
 
-ASI_ROOT = Path(__file__).resolve().parent
-PROJECT_ROOT = ASI_ROOT.parent
 DATA_ROOT = PROJECT_ROOT / "data"
 CKP_ROOT = PROJECT_ROOT / "ckp"
 WORK_DIRS_ROOT = ASI_ROOT / "work_dirs"
 
-sys.path.append(str(PROJECT_ROOT))
 sam_path = DATA_ROOT / "zzm" / "SurgicalSAM-main"
 sys.path.insert(0, str(sam_path))
+
+
+def resolve_default_checkpoint(dataset_name: str, fold: int) -> Path | None:
+    candidates = []
+    if dataset_name == "endovis_2017":
+        candidates.append(WORK_DIRS_ROOT / dataset_name / str(fold) / "model_ckp.pth")
+    else:
+        candidates.append(WORK_DIRS_ROOT / dataset_name / "model_ckp.pth")
+
+    candidates.extend(sorted(WORK_DIRS_ROOT.glob(f"{dataset_name}*/**/model_ckp.pth")))
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
 
 print("======> Process Arguments")
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="endovis_2017", choices=["endovis_2018", "endovis_2017"], help='specify dataset')
 parser.add_argument('--fold', type=int, default=3, choices=[0,1,2,3], help='specify fold number for endovis_2017 dataset')
 parser.add_argument('--num_class', type=int, default=7, help='specify the number of label classes')
+parser.add_argument('--checkpoint', type=str, default=None, help='optional path to a trained model checkpoint')
 args = parser.parse_args()
 
 
@@ -36,6 +55,7 @@ fold = args.fold
 num_class = args.num_class
 thr = 0
 data_root_dir = str(DATA_ROOT / "train_data" / dataset_name)
+checkpoint_override = Path(args.checkpoint).expanduser().resolve() if args.checkpoint else None
 
 
 print("======> Load Dataset-Specific Parameters" )
@@ -44,7 +64,6 @@ if "18" in dataset_name:
     dataset = Endovis18Dataset(data_root_dir = data_root_dir, 
                                 mode = "val",
                                 vit_mode = "h")
-    surgicalSAM_ckp = str(WORK_DIRS_ROOT / dataset_name / "model_ckp.pth")
     
     gt_endovis_masks = read_gt_endovis_masks(data_root_dir = data_root_dir,
                                             mode = "val")
@@ -57,13 +76,29 @@ elif "17" in dataset_name:
                                 vit_mode = "h",
                                 version = 0)
 
-    surgicalSAM_ckp = str(WORK_DIRS_ROOT / dataset_name / str(fold) / "model_ckp.pth")
-    
     gt_endovis_masks = read_gt_endovis_masks(data_root_dir = data_root_dir,
                                             mode = "val",
                                             fold = fold)
     
 dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
+
+if checkpoint_override is not None:
+    surgicalSAM_ckp = checkpoint_override
+else:
+    surgicalSAM_ckp = resolve_default_checkpoint(dataset_name, fold)
+
+if surgicalSAM_ckp is None or not surgicalSAM_ckp.is_file():
+    searched = [
+        str(WORK_DIRS_ROOT / dataset_name / "model_ckp.pth"),
+        str(WORK_DIRS_ROOT / dataset_name / str(fold) / "model_ckp.pth"),
+        str(WORK_DIRS_ROOT),
+    ]
+    raise FileNotFoundError(
+        "No trained model checkpoint found for inference. "
+        f"Dataset: {dataset_name}. Fold: {fold}. "
+        f"Searched: {searched}. "
+        "Pass --checkpoint /path/to/model_ckp.pth or train the model first."
+    )
 
 
 print("======> Load SAM" )
@@ -110,6 +145,15 @@ learnable_prototypes_model.eval()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 clip_model, preprocess = clip.load("ViT-L/14", device=device)
 
+def _json_default(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, torch.Tensor):
+        if value.ndim == 0:
+            return value.item()
+        return value.tolist()
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
 def print_log(str_to_print, log_file, is_dict = True):
     """Print a string and meanwhile write it to a log file
     """
@@ -117,7 +161,7 @@ def print_log(str_to_print, log_file, is_dict = True):
     
     with open(log_file, "w") as file:
         if is_dict:
-            file.write(json.dumps(str_to_print,indent=2))
+            file.write(json.dumps(str_to_print, indent=2, default=_json_default))
             file.write("\n")
         else:
             file.write(str_to_print)
@@ -150,6 +194,13 @@ def eval_endovis(endovis_masks, gt_endovis_masks,num_classes):
         #print("file_name: ",file_name)
        
         full_mask = gt_endovis_masks[file_name]
+        target_shape = tuple(full_mask.shape[-2:])
+        if prediction.shape[-2:] != target_shape:
+            prediction = cv2.resize(
+                prediction.astype(np.uint8),
+                (target_shape[1], target_shape[0]),
+                interpolation=cv2.INTER_NEAREST,
+            )
 
         
         im_iou = []
@@ -191,16 +242,20 @@ def eval_endovis(endovis_masks, gt_endovis_masks,num_classes):
 
     # calculate final metrics
     final_im_iou = cum_I / (cum_U + 1e-15)
-    mean_im_iou = np.sum(all_im_iou_acc)
-    mean_im_iou_challenge = np.sum(all_im_iou_acc_challenge)
+    mean_im_iou = float(np.mean(all_im_iou_acc)) if all_im_iou_acc else 0.0
+    mean_im_iou_challenge = float(np.mean(all_im_iou_acc_challenge)) if all_im_iou_acc_challenge else 0.0
 
     final_class_im_iou = torch.zeros(num_classes+2)
     cIoU_per_class = []
     for c in range(1, num_classes + 1):
-        final_class_im_iou[c-1] = torch.tensor(class_ious[c]).float().mean()
-        cIoU_per_class.append(round((final_class_im_iou[c-1]*100).item(), 3))
+        if len(class_ious[c]) > 0:
+            final_class_im_iou[c-1] = torch.tensor(class_ious[c]).float().mean()
+            cIoU_per_class.append(round((final_class_im_iou[c-1]*100).item(), 3))
+        else:
+            cIoU_per_class.append(None)
         
-    mean_class_iou = torch.tensor([torch.tensor(values).float().mean() for c, values in class_ious.items() if len(values) > 0]).sum().item()
+    valid_class_ious = [torch.tensor(values).float().mean() for values in class_ious.values() if len(values) > 0]
+    mean_class_iou = torch.stack(valid_class_ious).mean().item() if valid_class_ious else 0.0
     
     endovis_results["challengIoU"] = round(mean_im_iou_challenge*100,3)
     endovis_results["IoU"] = round(mean_im_iou*100,3)
@@ -226,10 +281,8 @@ with torch.no_grad():
     text_features = text_features.cuda()
     prototypes = learnable_prototypes_model(text_features)
     prototypes.cuda()
-    L = []
+    binary_masks = dict()
     for sam_feats, mask_names, cls_ids, masks,text,_ in dataloader: 
-        binary_masks = dict()
-
         #custom_sam.set_input(input_images,audio_spec,masks)
         # with torch.no_grad():
             # text = ['This is a Bipolar Forceps','This is a Prograsp Forceps','This is a Large Needle Driver', 'This is a Monopolar Curved Scissors', 'This is a Ultrasound Probe','This is a Suction Instrument','This is a Clip Applier']
@@ -256,10 +309,13 @@ with torch.no_grad():
 
         binary_masks = create_binary_masks(binary_masks, preds, preds_quality, mask_names, thr)
 
-        endovis_masks = create_endovis_masks(binary_masks, 1024, 1280)
-        endovis_results = eval_endovis(endovis_masks, gt_endovis_masks, num_class)
-        L.append(endovis_results)
-        log_path = DATA_ROOT / "sam_demo" / "surgical_sam.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        print_log(L, log_file=str(log_path))
+    endovis_masks = create_endovis_masks(binary_masks, 1024, 1280)
+    endovis_results = eval_endovis(endovis_masks, gt_endovis_masks, num_class)
 
+    log_path = DATA_ROOT / "sam_demo" / "surgical_sam.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    print_log(endovis_results, log_file=str(log_path))
+
+    print("======> Inference Results")
+    print(json.dumps(endovis_results, indent=2, default=_json_default))
+    print(f"======> Saved results to {log_path}")
