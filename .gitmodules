@@ -1,0 +1,3 @@
+[submodule "ASI/CLIP"]
+	path = ASI/CLIP
+	url = https://github.com/openai/CLIP.git
