@@ -116,10 +116,10 @@ For details about the generated dataset structure, see [DATASET.md](./DATASET.md
 or
 
 ```bash
+./scripts/06-train-model.sh --dataset endovis_2017 --fold 0
 ./scripts/06-train-model.sh --dataset endovis_2017 --fold 1
 ./scripts/06-train-model.sh --dataset endovis_2017 --fold 2
 ./scripts/06-train-model.sh --dataset endovis_2017 --fold 3
-./scripts/06-train-model.sh --dataset endovis_2017 --fold 4
 ```
 
 You can also train on EndoVis 2018:
